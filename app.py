@@ -8,6 +8,7 @@ import re
 import argparse
 import subprocess
 import os
+import glob
 
 _suffix = re.compile('\n$')
 
@@ -52,4 +53,9 @@ if __name__ == "__main__":
     asyncio.run(down.go())
     subprocess.run(["ffmpeg", "-i", args.url.split("/")
                     [-1], "-c", "copy", f"{args.name}.mkv"], cwd=os.path.join("video", args.name))
+    # 删除原始文件
+    for filepath in glob.glob(f"video/{args.name}/*.ts"):
+        os.remove(filepath)
+    for filepath in glob.glob(f"video/{args.name}/*.m3u8"):
+        os.remove(filepath)
     logging.info(f'{args.name}\t下载完毕')
