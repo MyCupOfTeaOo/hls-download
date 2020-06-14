@@ -8,6 +8,7 @@ import aiofiles
 import signal
 import sys
 import json
+import glob
 import traceback
 
 TIMEOUT = 20
@@ -25,9 +26,9 @@ def get_user_agent():
 
 class Download():
     _m3u8_url = ""
-    _list_url = []
-    _downloading_url = []
-    _wait_down_url = []
+    _list_uid = []
+    _downloading_uid = []
+    _wait_down_uid = []
     error_count = 0
 
     def __init__(self, name, list_url, process_num=10):
@@ -43,20 +44,21 @@ class Download():
         asyncio.ensure_future(self.monitor())
         if os.path.exists(f'{self._path}/log.json'):
             logging.debug(f'检测到历史下载记录,重新构建队列')
-            with open(f'{self._path}/log.json', encoding="utf-8", mode="r") as f:
-                log = json.loads(f.read())
-                self._list_url = log["wait_urls"]
-                self._wait_down_url = self._list_url.copy()
-            await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
+            self.refactor_list()
         else:
             await self.parse_list()
 
     async def monitor(self):
-        logging.info(f'总共:\t {len(self._list_url)}')
-        logging.info(f'已下载:\t {len(self._list_url) - len(self._wait_down_url)}')
-        logging.info(f'待下载:\t {len(self._wait_down_url)}')
-        logging.info(f'正在下载:\t {len(self._downloading_url)}')
+        logging.info(f'总共:\t {len(self._list_uid)}')
+        logging.info(
+            f'已下载:\t {len(self._list_uid) - len(self._wait_down_uid)}')
+        logging.info(f'待下载:\t {len(self._wait_down_uid)}')
+        logging.info(f'正在下载:\t {len(self._downloading_uid)}')
         logging.info(f'失败次数:\t {self.error_count}')
+        if (self.error_count > 100):
+            logging.error("下载失败过多,退出程序")
+            self.write_log(1, 1)
+
         await asyncio.sleep(5)
         asyncio.ensure_future(self.monitor())
 
@@ -64,11 +66,37 @@ class Download():
         logging.debug('检测到退出信号,准备写日志')
         with open(f'{self._path}/log.json', "w", encoding="utf-8") as f:
             f.write(json.dumps({
-                "wait_urls": self._wait_down_url + self._downloading_url,
-                "error_count": self.error_count
+                "wait_urls": self._wait_down_uid + self._downloading_uid,
+                "error_count": self.error_count,
+                "last_m3u8": self._m3u8_url.split('/')[-1]
             }, ensure_ascii=False,
                 indent=2, separators=(',', ':')))
         sys.exit(1)
+
+    async def refactor_list(self):
+        headers = {'user-agent': get_user_agent()}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=PROXY["http"]) as res:
+                list_text = await res.text()
+                with open(f'{self._path}/log.json', encoding="utf-8", mode="r") as f:
+                    log = json.loads(f.read())
+                with open(f'{self._path}/{log.get("last_m3u8")}', encoding="utf-8", mode="r") as f:
+                    last_m3u8 = f.read()
+                last_list_uid = ts_pattern.findall(last_m3u8)
+                list_url = ts_pattern.findall(list_text)
+                if last_list_uid[0] != = list_url[0]:
+                    logging.warning("检测到uid变动,重构uid")
+                    old_list_uid = log["wait_urls"]
+                    new_list_uid = list(
+                        map(lambda old_uid: list_url[last_list_uid.index(old_uid)], old_list_uid))
+                    self.create_file(self._m3u8_url.split('/')[-1], list_text)
+                    os.remove(f'{self._path}/{log.get("last_m3u8")}')
+                    self._list_uid = new_list_uid
+                    self._wait_down_uid = self._list_uid.copy()
+                else:
+                    self._list_uid = log["wait_urls"]
+                    self._wait_down_uid = self._list_uid.copy()
+                await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
 
     async def parse_list(self):
         headers = {'user-agent': get_user_agent()}
@@ -76,25 +104,25 @@ class Download():
             async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=PROXY["http"]) as res:
                 list_text = await res.text()
                 self.create_file(self._m3u8_url.split('/')[-1], list_text)
-                self._list_url = ts_pattern.findall(list_text)
-                self._wait_down_url = self._list_url.copy()
+                self._list_uid = ts_pattern.findall(list_text)
+                self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
 
     async def uid_process(self):
-        uid = self._wait_down_url.pop(0)
-        self._downloading_url.append(uid)
+        uid = self._wait_down_uid.pop(0)
+        self._downloading_uid.append(uid)
         if uid:
             url = f'{self._root_url}/{uid}'
             logging.debug(f'开始下载 {url}')
             result = await self.down_file(uid, url)
             if result:
-                self._downloading_url.remove(uid)
+                self._downloading_uid.remove(uid)
                 logging.debug(f'{uid} 下载成功')
             else:
                 logging.error(f'{uid} 下载失败')
                 self.error_count += 1
-                self._wait_down_url.append(uid)
-                self._downloading_url.remove(uid)
+                self._wait_down_uid.append(uid)
+                self._downloading_uid.remove(uid)
             await self.uid_process()
 
     async def down_file(self, name, url):
