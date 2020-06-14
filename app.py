@@ -48,3 +48,4 @@ if __name__ == "__main__":
     down = Download(args.name,
                     args.url, process_num=args.process)
     asyncio.run(down.go())
+    logging.info(f'{args.name}\t下载完毕')
