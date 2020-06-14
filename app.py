@@ -58,4 +58,6 @@ if __name__ == "__main__":
         os.remove(filepath)
     for filepath in glob.glob(f"video/{args.name}/*.m3u8"):
         os.remove(filepath)
+    for filepath in glob.glob(f"video/{args.name}/*.json"):
+        os.remove(filepath)
     logging.info(f'{args.name}\t下载完毕')
