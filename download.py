@@ -17,6 +17,7 @@ PROXY = {'http': 'http://127.0.0.1:1080',
          'https': 'https://127.0.0.1:1080', 'ftp': 'ftp://127.0.0.1:1080'}
 
 ts_pattern = re.compile(r"(?<=\n)[0-9]+.ts(?=\n|$)")
+key_pattern = re.compile(r"(?<=URI\=\")[0-9a-zA-Z]+.ts")
 
 
 def get_user_agent():
@@ -44,7 +45,7 @@ class Download():
         asyncio.ensure_future(self.monitor())
         if os.path.exists(f'{self._path}/log.json'):
             logging.debug(f'检测到历史下载记录,重新构建队列')
-            self.refactor_list()
+            await self.refactor_list()
         else:
             await self.parse_list()
 
@@ -84,13 +85,17 @@ class Download():
                     last_m3u8 = f.read()
                 last_list_uid = ts_pattern.findall(last_m3u8)
                 list_url = ts_pattern.findall(list_text)
-                if last_list_uid[0] != = list_url[0]:
+                if last_list_uid[0] != list_url[0]:
                     logging.warning("检测到uid变动,重构uid")
                     old_list_uid = log["wait_urls"]
                     new_list_uid = list(
                         map(lambda old_uid: list_url[last_list_uid.index(old_uid)], old_list_uid))
+                    # key
+                    key = key_pattern.search(list_text).group()
                     self.create_file(self._m3u8_url.split('/')[-1], list_text)
+                    await down_file(key, f'{self._root_url}/{key}')
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
+                    os.remove(f'{self._path}/{key_pattern.search(last_m3u8).group()}')
                     self._list_uid = new_list_uid
                     self._wait_down_uid = self._list_uid.copy()
                 else:
@@ -103,7 +108,10 @@ class Download():
         async with aiohttp.ClientSession() as session:
             async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=PROXY["http"]) as res:
                 list_text = await res.text()
+                # key
+                key = key_pattern.search(list_text).group()
                 self.create_file(self._m3u8_url.split('/')[-1], list_text)
+                await self.down_file(key, f'{self._root_url}/{key}')
                 self._list_uid = ts_pattern.findall(list_text)
                 self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
