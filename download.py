@@ -30,7 +30,8 @@ class Download():
     _list_uid = []
     _downloading_uid = []
     _wait_down_uid = []
-    error_count = 0
+    _error_count = 0
+    _consecutive_error_count = 0
 
     def __init__(self, name, list_url, process_num=10):
         self._m3u8_url = list_url
@@ -55,9 +56,9 @@ class Download():
             f'已下载:\t {len(self._list_uid) - len(self._wait_down_uid)}')
         logging.info(f'待下载:\t {len(self._wait_down_uid)}')
         logging.info(f'正在下载:\t {len(self._downloading_uid)}')
-        logging.info(f'失败次数:\t {self.error_count}')
-        if (self.error_count > 100):
-            logging.error("下载失败过多,退出程序")
+        logging.info(f'失败次数:\t {self._error_count}')
+        if (self._consecutive_error_count > 20):
+            logging.error("连续下载失败过多,退出程序")
             self.write_log(1, 1)
 
         await asyncio.sleep(5)
@@ -68,7 +69,7 @@ class Download():
         with open(f'{self._path}/log.json', "w", encoding="utf-8") as f:
             f.write(json.dumps({
                 "wait_urls": self._wait_down_uid + self._downloading_uid,
-                "error_count": self.error_count,
+                "_error_count": self._error_count,
                 "last_m3u8": self._m3u8_url.split('/')[-1]
             }, ensure_ascii=False,
                 indent=2, separators=(',', ':')))
@@ -133,11 +134,13 @@ class Download():
         logging.debug(f'开始下载 {url}')
         result = await self.down_file(uid, url)
         if result:
+            self._consecutive_error_count = 0
             self._downloading_uid.remove(uid)
             logging.debug(f'{uid} 下载成功')
         else:
             logging.error(f'{uid} 下载失败')
-            self.error_count += 1
+            self._error_count += 1
+            self._consecutive_error_count += 1
             self._wait_down_uid.append(uid)
             self._downloading_uid.remove(uid)
         await self.uid_process()
