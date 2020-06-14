@@ -13,8 +13,6 @@ import traceback
 
 TIMEOUT = 20
 
-PROXY = {'http': 'http://127.0.0.1:1080',
-         'https': 'https://127.0.0.1:1080', 'ftp': 'ftp://127.0.0.1:1080'}
 
 ts_pattern = re.compile(r"(?<=\n)[0-9]+.ts(?=\n|$)")
 key_pattern = re.compile(r"(?<=URI\=\")[0-9a-zA-Z]+.ts")
@@ -33,8 +31,9 @@ class Download():
     _error_count = 0
     _consecutive_error_count = 0
 
-    def __init__(self, name, list_url, process_num=10):
+    def __init__(self, name, list_url, proxy=None, process_num=10):
         self._m3u8_url = list_url
+        self._proxy = proxy
         self.process_num = process_num
         self._name = name
         self._root_url = "/".join(list_url.split('/')[:-1])
@@ -78,7 +77,7 @@ class Download():
     async def refactor_list(self):
         headers = {'user-agent': get_user_agent()}
         async with aiohttp.ClientSession() as session:
-            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=PROXY["http"]) as res:
+            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy) as res:
                 list_text = await res.text()
                 with open(f'{self._path}/log.json', encoding="utf-8", mode="r") as f:
                     log = json.loads(f.read())
@@ -111,7 +110,7 @@ class Download():
     async def parse_list(self):
         headers = {'user-agent': get_user_agent()}
         async with aiohttp.ClientSession() as session:
-            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=PROXY["http"]) as res:
+            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy) as res:
                 list_text = await res.text()
                 # key
                 key_res = key_pattern.search(list_text)
@@ -148,7 +147,7 @@ class Download():
     async def down_file(self, name, url):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=TIMEOUT, proxy=PROXY["http"]) as res:
+                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
                     if res.status == 200:
                         async with aiofiles.open(f'{self._path}/{name}', mode="wb") as f:
                             await f.write(await res.read())

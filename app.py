@@ -38,6 +38,10 @@ if __name__ == "__main__":
     parser.add_argument("url", help="m3u8文件地址")
     parser.add_argument("-p", "--process",
                         help="下载进程数,默认5", type=int, default=5)
+    parser.add_argument("--proxy",
+                        help="代理地址,默认http://127.0.0.1:1080", default="http://127.0.0.1:1080")
+    parser.add_argument("--no-proxy", action="store_true",
+                        help="关闭代理")
 
     args = parser.parse_args()
 
@@ -47,9 +51,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, handlers=(
         cust_handler,))
     init()
-
     down = Download(args.name,
-                    args.url, process_num=args.process)
+                    args.url, proxy=args.proxy if not args.no_proxy else None, process_num=args.process)
     asyncio.run(down.go())
     subprocess.run(["ffmpeg", "-i", args.url.split("/")
                     [-1], "-c", "copy", f"{args.name}.mkv"], cwd=os.path.join("video", args.name))
