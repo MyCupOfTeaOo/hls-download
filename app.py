@@ -6,6 +6,7 @@ from colorama import init
 from termcolor import colored
 import re
 import argparse
+import os
 
 _suffix = re.compile('\n$')
 
@@ -48,4 +49,5 @@ if __name__ == "__main__":
     down = Download(args.name,
                     args.url, process_num=args.process)
     asyncio.run(down.go())
+    os.system(f'ffmpeg -i {url.split("/")[-1]} -c copy "{name}.mkv"')
     logging.info(f'{args.name}\t下载完毕')
