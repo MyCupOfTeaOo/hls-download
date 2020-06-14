@@ -49,5 +49,5 @@ if __name__ == "__main__":
     down = Download(args.name,
                     args.url, process_num=args.process)
     asyncio.run(down.go())
-    os.system(f'ffmpeg -i {args.url.split("/")[-1]} -c copy "{name}.mkv"')
+    os.system(f'ffmpeg -i {args.url.split("/")[-1]} -c copy "{args.name}.mkv"')
     logging.info(f'{args.name}\t下载完毕')
