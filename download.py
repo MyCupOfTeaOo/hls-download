@@ -59,7 +59,6 @@ class Download():
         if (self._consecutive_error_count > 20):
             logging.error("连续下载失败过多,退出程序")
             self.write_log(1, 1)
-
         await asyncio.sleep(5)
         asyncio.ensure_future(self.monitor())
 
@@ -95,7 +94,7 @@ class Download():
                     key = None
                     if key_res:
                         key = key_res.group()
-                    self.create_file(self._m3u8_url.split('/')[-1], list_text)
+                    self.create_file(self._m3u8_url.split('/')[-1], list_text + '\n#EXT-X-ENDLIST')
                     if key:
                         await self.down_file(key, f'{self._root_url}/{key}')
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
@@ -117,7 +116,7 @@ class Download():
                 key = None
                 if key_res:
                     key = key_res.group()
-                self.create_file(self._m3u8_url.split('/')[-1], list_text)
+                self.create_file(self._m3u8_url.split('/')[-1], list_text + '\n#EXT-X-ENDLIST')
                 if key:
                     await self.down_file(key, f'{self._root_url}/{key}')
                 self._list_uid = ts_pattern.findall(list_text)
