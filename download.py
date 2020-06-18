@@ -14,8 +14,8 @@ import traceback
 TIMEOUT = 20
 
 
-ts_pattern = re.compile(r"(?<=\n)[0-9]+.ts(?=\n|$)")
-key_pattern = re.compile(r"(?<=URI\=\")[0-9a-zA-Z]+.ts")
+ts_pattern = re.compile(r"(?<=\n)\S+.ts(?=\n|$)")
+key_pattern = re.compile(r"(?<=URI\=\")\S+.ts(?=\")")
 
 
 def get_user_agent():
@@ -72,7 +72,7 @@ class Download():
                 "last_m3u8": self._m3u8_url.split('/')[-1]
             }, ensure_ascii=False,
                 indent=2, separators=(',', ':')))
-        sys.exit(1)
+        os._exit(0)
 
     async def refactor_list(self):
         headers = {'user-agent': get_user_agent()}

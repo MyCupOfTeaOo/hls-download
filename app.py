@@ -54,6 +54,7 @@ if __name__ == "__main__":
     down = Download(args.name,
                     args.url, proxy=args.proxy if not args.no_proxy else None, process_num=args.process)
     asyncio.run(down.go())
+
     subprocess.run(["ffmpeg", "-i", args.url.split("/")
                     [-1], "-c", "copy", f"{args.name}.mkv"], cwd=os.path.join("video", args.name))
     # 删除原始文件
