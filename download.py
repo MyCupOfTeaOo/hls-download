@@ -1,6 +1,6 @@
 import aiohttp
 import asyncio
-from fake_useragent import UserAgent
+# from fake_useragent import UserAgent
 import os
 import re
 import logging
@@ -19,8 +19,9 @@ key_pattern = re.compile(r"(?<=URI\=\")\S+.ts(?=\")")
 
 
 def get_user_agent():
-    ua = UserAgent()
-    return ua.random
+    # ua = UserAgent()
+    # return ua.random
+    return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 
 
 class Download():
@@ -78,6 +79,9 @@ class Download():
         async with aiohttp.ClientSession() as session:
             async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy) as res:
                 list_text = await res.text()
+                if (res.status > 300):
+                    logging.error(list_text)
+                    os._exit(0)
                 with open(f'{self._path}/log.json', encoding="utf-8", mode="r") as f:
                     log = json.loads(f.read())
                 with open(f'{self._path}/{log.get("last_m3u8")}', encoding="utf-8", mode="r") as f:
@@ -94,7 +98,8 @@ class Download():
                     key = None
                     if key_res:
                         key = key_res.group()
-                    self.create_file(self._m3u8_url.split('/')[-1], list_text + '\n#EXT-X-ENDLIST')
+                    self.create_file(self._m3u8_url.split(
+                        '/')[-1], list_text + '\n#EXT-X-ENDLIST')
                     if key:
                         await self.down_file(key, f'{self._root_url}/{key}')
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
@@ -111,12 +116,16 @@ class Download():
         async with aiohttp.ClientSession() as session:
             async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy) as res:
                 list_text = await res.text()
+                if (res.status > 300):
+                    logging.error(list_text)
+                    os._exit(0)
                 # key
                 key_res = key_pattern.search(list_text)
                 key = None
                 if key_res:
                     key = key_res.group()
-                self.create_file(self._m3u8_url.split('/')[-1], list_text + '\n#EXT-X-ENDLIST')
+                self.create_file(self._m3u8_url.split(
+                    '/')[-1], list_text + '\n#EXT-X-ENDLIST')
                 if key:
                     await self.down_file(key, f'{self._root_url}/{key}')
                 self._list_uid = ts_pattern.findall(list_text)
