@@ -101,7 +101,8 @@ class Download():
                     self.create_file(self._m3u8_url.split(
                         '/')[-1], list_text + '\n#EXT-X-ENDLIST')
                     if key:
-                        await self.down_file(key, f'{self._root_url}/{key}')
+                        if not await self.down_file(key, f'{self._root_url}/{key}'):
+                            raise RuntimeError("下载key文件失败")
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
 
                     self._list_uid = new_list_uid
@@ -127,7 +128,8 @@ class Download():
                 self.create_file(self._m3u8_url.split(
                     '/')[-1], list_text + '\n#EXT-X-ENDLIST')
                 if key:
-                    await self.down_file(key, f'{self._root_url}/{key}')
+                    if not await self.down_file(key, f'{self._root_url}/{key}'):
+                        raise RuntimeError("下载key文件失败")
                 self._list_uid = ts_pattern.findall(list_text)
                 self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
