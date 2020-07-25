@@ -42,8 +42,8 @@ class Download():
         self._path = f'video/{name}'
 
     async def go(self):
-        signal.signal(signal.SIGTERM, self.write_log)
-        signal.signal(signal.SIGINT, self.write_log)
+        signal.signal(signal.SIGTERM, self.registry_exit_callback)
+        signal.signal(signal.SIGINT, self.registry_exit_callback)
         asyncio.ensure_future(self.monitor())
         if os.path.exists(f'{self._path}/log.json'):
             logging.debug(f'检测到历史下载记录,重新构建队列')
@@ -60,12 +60,16 @@ class Download():
         logging.info(f'失败次数:\t {self._error_count}')
         if (self._consecutive_error_count > 20):
             logging.error("连续下载失败过多,退出程序")
-            self.write_log(1, 1)
+            self.registry_exit_callback(1, 1)
         await asyncio.sleep(5)
         asyncio.ensure_future(self.monitor())
 
-    def write_log(self, signum, frame):
+    def registry_exit_callback(self, signum, frame):
         logging.debug('检测到退出信号,准备写日志')
+        self.write_log()
+        os._exit(0)
+
+    def write_log(self):
         with open(f'{self._path}/log.json', "w", encoding="utf-8") as f:
             f.write(json.dumps({
                 "wait_urls": self._wait_down_uid + self._downloading_uid,
@@ -73,7 +77,6 @@ class Download():
                 "last_m3u8": name_filter_pattern.sub("", self._m3u8_url.split('/')[-1])
             }, ensure_ascii=False,
                 indent=2, separators=(',', ':')))
-        os._exit(0)
 
     async def refactor_list(self):
         headers = {'user-agent': get_user_agent()}
@@ -113,7 +116,7 @@ class Download():
                     self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
                 # 回写日志,防止重下载
-                self.write_log(0, 0)
+                self.write_log()
 
     async def parse_list(self):
         headers = {'user-agent': get_user_agent()}
@@ -137,7 +140,7 @@ class Download():
                 self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
                 # 回写日志,防止重下载
-                self.write_log(0, 0)
+                self.write_log()
 
     async def uid_process(self):
         if len(self._wait_down_uid) < 1:
