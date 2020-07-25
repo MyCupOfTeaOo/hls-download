@@ -67,7 +67,7 @@ if __name__ == "__main__":
                 ts_link, name_filter_pattern.sub("", ts_link))
         f.write(m3u8_file)
     sp = subprocess.run(["ffmpeg", "-i", m3u8_name, "-c", "copy",
-                         f"{args.name}.mkv"], cwd=os.path.join("video", args.name))
+                         f"{args.name}.mp4"], cwd=os.path.join("video", args.name))
     if sp.returncode != 0:
         logging.error("合并异常")
     else:
