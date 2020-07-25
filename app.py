@@ -65,8 +65,10 @@ if __name__ == "__main__":
         for ts_link in ts_list:
             m3u8_file = m3u8_file.replace(
                 ts_link, name_filter_pattern.sub("", ts_link))
+        f.truncate(0)
+        f.seek(0)
         f.write(m3u8_file)
-    sp = subprocess.run(["ffmpeg", "-i", m3u8_name, "-c", "copy",
+    sp = subprocess.run(["ffmpeg", "-i", m3u8_name, "-movflags", "faststart", "-c", "copy",
                          f"{args.name}.mp4"], cwd=os.path.join("video", args.name))
     if sp.returncode != 0:
         logging.error("合并异常")
