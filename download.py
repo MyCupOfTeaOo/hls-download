@@ -14,8 +14,9 @@ import traceback
 TIMEOUT = 20
 
 
-ts_pattern = re.compile(r"(?<=\n)\S+.ts(?=\n|$)")
+ts_pattern = re.compile(r"(?<=\n)(\S+.ts|\S+.ts\?.+)(?=\n|$)")
 key_pattern = re.compile(r"(?<=URI\=\")\S+.ts(?=\")")
+name_filter_pattern = re.compile(r"\?.*")
 
 
 def get_user_agent():
@@ -98,8 +99,8 @@ class Download():
                     key = None
                     if key_res:
                         key = key_res.group()
-                    self.create_file(self._m3u8_url.split(
-                        '/')[-1], list_text + '\n#EXT-X-ENDLIST')
+                    self.create_file(name_filter_pattern.sub("", self._m3u8_url.split(
+                        '/')[-1]), list_text + '\n#EXT-X-ENDLIST')
                     if key:
                         if not await self.down_file(key, f'{self._root_url}/{key}'):
                             raise RuntimeError("下载key文件失败")
@@ -125,8 +126,8 @@ class Download():
                 key = None
                 if key_res:
                     key = key_res.group()
-                self.create_file(self._m3u8_url.split(
-                    '/')[-1], list_text + '\n#EXT-X-ENDLIST')
+                self.create_file(name_filter_pattern.sub("", self._m3u8_url.split(
+                    '/')[-1]), list_text + '\n#EXT-X-ENDLIST')
                 if key:
                     if not await self.down_file(key, f'{self._root_url}/{key}'):
                         raise RuntimeError("下载key文件失败")
@@ -159,7 +160,7 @@ class Download():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
                     if res.status == 200:
-                        async with aiofiles.open(f'{self._path}/{name}', mode="wb") as f:
+                        async with aiofiles.open(f'{self._path}/{name_filter_pattern.sub("",name)}', mode="wb") as f:
                             await f.write(await res.read())
                             return True
         except:
