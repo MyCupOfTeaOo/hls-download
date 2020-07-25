@@ -70,7 +70,7 @@ class Download():
             f.write(json.dumps({
                 "wait_urls": self._wait_down_uid + self._downloading_uid,
                 "_error_count": self._error_count,
-                "last_m3u8": self._m3u8_url.split('/')[-1]
+                "last_m3u8": name_filter_pattern.sub("", self._m3u8_url.split('/')[-1])
             }, ensure_ascii=False,
                 indent=2, separators=(',', ':')))
         os._exit(0)
