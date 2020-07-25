@@ -9,6 +9,7 @@ import argparse
 import subprocess
 import os
 import glob
+from download import ts_pattern, name_filter_pattern
 
 _suffix = re.compile('\n$')
 
@@ -54,9 +55,11 @@ if __name__ == "__main__":
     down = Download(args.name,
                     args.url, proxy=args.proxy if not args.no_proxy else None, process_num=args.process)
     asyncio.run(down.go())
-
-    sp = subprocess.run(["ffmpeg", "-i", args.url.split("/")
-                          [-1], "-c", "copy", f"{args.name}.mkv"], cwd=os.path.join("video", args.name))
+    # 需要处理下带querystring的文件名
+    m3u9_name = name_filter_pattern.sub("", args.url.split("/")
+                                        [-1])
+    sp = subprocess.run(["ffmpeg", "-i", m3u9_name, "-c", "copy",
+                         f"{args.name}.mkv"], cwd=os.path.join("video", args.name))
     if sp.returncode != 0:
         logging.error("合并异常")
     else:

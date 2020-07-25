@@ -112,6 +112,8 @@ class Download():
                     self._list_uid = log["wait_urls"]
                     self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
+                # 回写日志,防止重下载
+                self.write_log()
 
     async def parse_list(self):
         headers = {'user-agent': get_user_agent()}
@@ -134,6 +136,8 @@ class Download():
                 self._list_uid = ts_pattern.findall(list_text)
                 self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
+                # 回写日志,防止重下载
+                self.write_log()
 
     async def uid_process(self):
         if len(self._wait_down_uid) < 1:
