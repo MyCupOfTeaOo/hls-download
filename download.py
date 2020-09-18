@@ -10,6 +10,7 @@ import sys
 import json
 import glob
 import traceback
+from urllib.parse import urljoin
 
 TIMEOUT = 20
 
@@ -38,7 +39,7 @@ class Download():
         self._proxy = proxy
         self.process_num = process_num
         self._name = name
-        self._root_url = "/".join(list_url.split('/')[:-1])
+        self._root_url = "/".join(list_url.split('/')[:-1]) + "/"
         self._path = f'video/{name}'
 
     async def go(self):
@@ -105,7 +106,7 @@ class Download():
                     self.create_file(name_filter_pattern.sub("", self._m3u8_url.split(
                         '/')[-1]), list_text + '\n#EXT-X-ENDLIST')
                     if key:
-                        if not await self.down_file(key, f'{self._root_url}/{key}'):
+                        if not await self.down_file(key, urljoin(self._root_url, key)):
                             raise RuntimeError("下载key文件失败")
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
 
@@ -134,7 +135,7 @@ class Download():
                 self.create_file(name_filter_pattern.sub("", self._m3u8_url.split(
                     '/')[-1]), list_text + '\n#EXT-X-ENDLIST')
                 if key:
-                    if not await self.down_file(key, f'{self._root_url}/{key}'):
+                    if not await self.down_file(key, urljoin(self._root_url, key)):
                         raise RuntimeError("下载key文件失败")
                 self._list_uid = ts_pattern.findall(list_text)
                 self._wait_down_uid = self._list_uid.copy()
@@ -147,9 +148,9 @@ class Download():
             return
         uid = self._wait_down_uid.pop(0)
         self._downloading_uid.append(uid)
-        url = f'{self._root_url}/{uid}'
+        url = urljoin(self._root_url, uid)
         logging.debug(f'开始下载 {url}')
-        result = await self.down_file(uid, url)
+        result = await self.down_file(uid.split("/")[-1], url)
         if result:
             self._consecutive_error_count = 0
             self._downloading_uid.remove(uid)
