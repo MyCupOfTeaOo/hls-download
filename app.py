@@ -62,8 +62,10 @@ if __name__ == "__main__":
     with open(f'{down._path}/{m3u8_name}', encoding="utf-8", mode="r+") as f:
         m3u8_file = f.read()
         key_res = key_pattern.search(m3u8_file)
-        m3u8_file.replace(
-            key_res, name_filter_pattern.sub("", key_res.split("/")[-1]))
+        if key_res:
+            key_name = key_res.group()
+            m3u8_file = m3u8_file.replace(
+                key_name, name_filter_pattern.sub("", key_name.split("/")[-1]))
         ts_list = ts_pattern.findall(m3u8_file)
         for ts_link in ts_list:
             m3u8_file = m3u8_file.replace(

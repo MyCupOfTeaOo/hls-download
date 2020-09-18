@@ -103,8 +103,8 @@ class Download():
                     key = None
                     if key_res:
                         key = key_res.group()
-                    self.create_file(name_filter_pattern.sub("", self._m3u8_url.split(
-                        '/')[-1]), list_text + '\n#EXT-X-ENDLIST')
+                    self.create_file(
+                        self._m3u8_url, list_text + '\n#EXT-X-ENDLIST')
                     if key:
                         if not await self.down_file(key, urljoin(self._root_url, key)):
                             raise RuntimeError("下载key文件失败")
