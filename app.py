@@ -9,7 +9,7 @@ import argparse
 import subprocess
 import os
 import glob
-from download import ts_pattern, name_filter_pattern
+from download import ts_pattern, name_filter_pattern, key_pattern
 
 _suffix = re.compile('\n$')
 
@@ -61,10 +61,13 @@ if __name__ == "__main__":
     # 需要处理下m3u8文件防止文件名不一致
     with open(f'{down._path}/{m3u8_name}', encoding="utf-8", mode="r+") as f:
         m3u8_file = f.read()
+        key_res = key_pattern.search(m3u8_file)
+        m3u8_file.replace(
+            key_res, name_filter_pattern.sub("", key_res.split("/")[-1]))
         ts_list = ts_pattern.findall(m3u8_file)
         for ts_link in ts_list:
             m3u8_file = m3u8_file.replace(
-                ts_link, name_filter_pattern.sub("", ts_link))
+                ts_link, name_filter_pattern.sub("", ts_link.split("/")[-1]))
         f.truncate(0)
         f.seek(0)
         f.write(m3u8_file)

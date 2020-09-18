@@ -16,7 +16,7 @@ TIMEOUT = 20
 
 
 ts_pattern = re.compile(r"(?<=\n)(\S+.ts|\S+.ts\?.+)(?=\n|$)")
-key_pattern = re.compile(r"(?<=URI\=\")\S+.ts(?=\")")
+key_pattern = re.compile(r"(?<=URI\=\")\S+.(ts|key)(?=\")")
 name_filter_pattern = re.compile(r"\?.*")
 
 
@@ -150,7 +150,7 @@ class Download():
         self._downloading_uid.append(uid)
         url = urljoin(self._root_url, uid)
         logging.debug(f'开始下载 {url}')
-        result = await self.down_file(uid.split("/")[-1], url)
+        result = await self.down_file(uid, url)
         if result:
             self._consecutive_error_count = 0
             self._downloading_uid.remove(uid)
@@ -168,7 +168,7 @@ class Download():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
                     if res.status == 200:
-                        async with aiofiles.open(f'{self._path}/{name_filter_pattern.sub("",name)}', mode="wb") as f:
+                        async with aiofiles.open(f'{self._path}/{name_filter_pattern.sub("",name.split("/")[-1])}', mode="wb") as f:
                             await f.write(await res.read())
                             return True
         except:
@@ -178,6 +178,6 @@ class Download():
     def create_file(self, filename, text):
         if not os.path.exists(self._path):
             os.makedirs(self._path)
-        filepath = f'{self._path}/{filename}'
+        filepath = f'{self._path}/{name_filter_pattern.sub("",filename.split("/")[-1])}'
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(text)
