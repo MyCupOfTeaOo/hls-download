@@ -9,7 +9,7 @@ import argparse
 import subprocess
 import os
 import glob
-from download import ts_pattern, name_filter_pattern, key_pattern
+from download import ts_pattern, name_filter_pattern, key_pattern, file_suffix
 
 _suffix = re.compile('\n$')
 
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         if key_res:
             key_name = key_res.group()
             m3u8_file = m3u8_file.replace(
-                key_name, name_filter_pattern.sub("", key_name.split("/")[-1]))
+                key_name, name_filter_pattern.sub("", file_suffix.sub(".ts", key_name.split("/")[-1])))
         ts_list = ts_pattern.findall(m3u8_file)
         for ts_link in ts_list:
             m3u8_file = m3u8_file.replace(
@@ -73,8 +73,10 @@ if __name__ == "__main__":
         f.truncate(0)
         f.seek(0)
         f.write(m3u8_file)
-    sp = subprocess.run(["ffmpeg", "-i", m3u8_name, "-movflags", "faststart", "-c", "copy",
-                         f"{args.name}.mp4"], cwd=os.path.join("video", args.name))
+    cmd = ["ffmpeg", "-i", m3u8_name, "-movflags", "faststart", "-c", "copy",
+           f"{args.name}.mp4"]
+    logging.info(f"执行命令: {' '.join(cmd)}")
+    sp = subprocess.run(cmd, cwd=os.path.join("video", args.name))
     if sp.returncode != 0:
         logging.error("合并异常")
     else:

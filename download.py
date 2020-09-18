@@ -17,6 +17,7 @@ TIMEOUT = 20
 
 ts_pattern = re.compile(r"(?<=\n)(\S+.ts|\S+.ts\?.+)(?=\n|$)")
 key_pattern = re.compile(r"(?<=URI\=\")\S+.(ts|key)(?=\")")
+file_suffix = re.compile(r"\..*")
 name_filter_pattern = re.compile(r"\?.*")
 
 
@@ -106,7 +107,7 @@ class Download():
                     self.create_file(
                         self._m3u8_url, list_text + '\n#EXT-X-ENDLIST')
                     if key:
-                        if not await self.down_file(key, urljoin(self._root_url, key)):
+                        if not await self.down_file(file_suffix.sub(".ts", key), urljoin(self._root_url, key)):
                             raise RuntimeError("下载key文件失败")
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
 
