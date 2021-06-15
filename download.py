@@ -40,7 +40,7 @@ class Download():
         self._proxy = proxy
         self.process_num = process_num
         self._name = name
-        self._root_url = "/".join(list_url.split('/')[:-1]) + "/"
+        self._root_url = "/".join(list_url.split("?")[0].split('/')[:-1]) + "/"
         self._path = f'video/{name}'
 
     async def go(self):
@@ -76,7 +76,7 @@ class Download():
             f.write(json.dumps({
                 "wait_urls": self._wait_down_uid + self._downloading_uid,
                 "_error_count": self._error_count,
-                "last_m3u8": name_filter_pattern.sub("", self._m3u8_url.split('/')[-1])
+                "last_m3u8": name_filter_pattern.sub("", self._m3u8_url.split("?")[0].split('/')[-1])
             }, ensure_ascii=False,
                 indent=2, separators=(',', ':')))
 
@@ -133,8 +133,8 @@ class Download():
                 key = None
                 if key_res:
                     key = key_res.group()
-                self.create_file(name_filter_pattern.sub("", self._m3u8_url.split(
-                    '/')[-1]), list_text + '\n#EXT-X-ENDLIST')
+                self.create_file(name_filter_pattern.sub(
+                    "", self._m3u8_url), list_text + '\n#EXT-X-ENDLIST')
                 if key:
                     if not await self.down_file(key, urljoin(self._root_url, key)):
                         raise RuntimeError("下载key文件失败")
@@ -169,7 +169,7 @@ class Download():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
                     if res.status == 200:
-                        async with aiofiles.open(f'{self._path}/{name_filter_pattern.sub("",name.split("/")[-1])}', mode="wb") as f:
+                        async with aiofiles.open(f'{self._path}/{name_filter_pattern.sub("",name.split("?")[0].split("/")[-1])}', mode="wb") as f:
                             await f.write(await res.read())
                             return True
         except:
@@ -179,6 +179,6 @@ class Download():
     def create_file(self, filename, text):
         if not os.path.exists(self._path):
             os.makedirs(self._path)
-        filepath = f'{self._path}/{name_filter_pattern.sub("",filename.split("/")[-1])}'
+        filepath = f'{self._path}/{name_filter_pattern.sub("",filename.split("?")[0].split("/")[-1])}'
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(text)

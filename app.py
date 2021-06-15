@@ -56,7 +56,7 @@ if __name__ == "__main__":
                     args.url, proxy=args.proxy if not args.no_proxy else None, process_num=args.process)
     asyncio.run(down.go())
     # 需要处理下带querystring的文件名
-    m3u8_name = name_filter_pattern.sub("", args.url.split("/")
+    m3u8_name = name_filter_pattern.sub("", args.url.split("?")[0].split("/")
                                         [-1])
     # 需要处理下m3u8文件防止文件名不一致
     with open(f'{down._path}/{m3u8_name}', encoding="utf-8", mode="r+") as f:
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         ts_list = ts_pattern.findall(m3u8_file)
         for ts_link in ts_list:
             m3u8_file = m3u8_file.replace(
-                ts_link, name_filter_pattern.sub("", ts_link.split("/")[-1]))
+                ts_link, name_filter_pattern.sub("", ts_link.split("?")[0].split("/")[-1]))
         f.truncate(0)
         f.seek(0)
         f.write(m3u8_file)
