@@ -15,12 +15,6 @@ from urllib.parse import urljoin
 TIMEOUT = 20
 
 
-ts_pattern = re.compile(r"(?<=\n)(\S+.ts|\S+.ts\?.+)(?=\n|$)")
-key_pattern = re.compile(r"(?<=URI\=\")\S+.(ts|key)(?=\")")
-file_suffix = re.compile(r"\..*")
-name_filter_pattern = re.compile(r"\?.*")
-
-
 def get_user_agent():
     # ua = UserAgent()
     # return ua.random
@@ -34,6 +28,10 @@ class Download():
     _wait_down_uid = []
     _error_count = 0
     _consecutive_error_count = 0
+    ts_pattern = re.compile(r"(?<=\n)(\S+.ts|\S+.ts\?.+)(?=\n|$)")
+    key_pattern = re.compile(r"(?<=URI\=\")\S+.(ts|key)(?=\")")
+    file_suffix = re.compile(r"\..*")
+    name_filter_pattern = re.compile(r"\?.*")
 
     def __init__(self, name, list_url, proxy=None, process_num=10):
         self._m3u8_url = list_url
@@ -76,7 +74,7 @@ class Download():
             f.write(json.dumps({
                 "wait_urls": self._wait_down_uid + self._downloading_uid,
                 "_error_count": self._error_count,
-                "last_m3u8": name_filter_pattern.sub("", self._m3u8_url.split("?")[0].split('/')[-1])
+                "last_m3u8": self.name_filter_pattern.sub("", self._m3u8_url.split("?")[0].split('/')[-1])
             }, ensure_ascii=False,
                 indent=2, separators=(',', ':')))
 
@@ -92,22 +90,22 @@ class Download():
                     log = json.loads(f.read())
                 with open(f'{self._path}/{log.get("last_m3u8")}', encoding="utf-8", mode="r") as f:
                     last_m3u8 = f.read()
-                last_list_uid = ts_pattern.findall(last_m3u8)
-                list_url = ts_pattern.findall(list_text)
+                last_list_uid = self.ts_pattern.findall(last_m3u8)
+                list_url = self.ts_pattern.findall(list_text)
                 if last_list_uid[0] != list_url[0]:
                     logging.warning("检测到uid变动,重构uid")
                     old_list_uid = log["wait_urls"]
                     new_list_uid = list(
                         map(lambda old_uid: list_url[last_list_uid.index(old_uid)], old_list_uid))
                     # key
-                    key_res = key_pattern.search(list_text)
+                    key_res = self.key_pattern.search(list_text)
                     key = None
                     if key_res:
                         key = key_res.group()
                     self.create_file(
                         self._m3u8_url, list_text + '\n#EXT-X-ENDLIST')
                     if key:
-                        if not await self.down_file(file_suffix.sub(".ts", key), urljoin(self._root_url, key)):
+                        if not await self.down_file(self.file_suffix.sub(".ts", key), urljoin(self._root_url, key)):
                             raise RuntimeError("下载key文件失败")
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
 
@@ -129,16 +127,16 @@ class Download():
                     logging.error(list_text)
                     os._exit(0)
                 # key
-                key_res = key_pattern.search(list_text)
+                key_res = self.key_pattern.search(list_text)
                 key = None
                 if key_res:
                     key = key_res.group()
-                self.create_file(name_filter_pattern.sub(
-                    "", self._m3u8_url), list_text + '\n#EXT-X-ENDLIST')
+                self.create_file(self._m3u8_url, list_text +
+                                 '\n#EXT-X-ENDLIST')
                 if key:
                     if not await self.down_file(key, urljoin(self._root_url, key)):
                         raise RuntimeError("下载key文件失败")
-                self._list_uid = ts_pattern.findall(list_text)
+                self._list_uid = self.ts_pattern.findall(list_text)
                 self._wait_down_uid = self._list_uid.copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
                 # 回写日志,防止重下载
@@ -169,7 +167,7 @@ class Download():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
                     if res.status == 200:
-                        async with aiofiles.open(f'{self._path}/{name_filter_pattern.sub("",name.split("?")[0].split("/")[-1])}', mode="wb") as f:
+                        async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("?")[0].split("/")[-1])}', mode="wb") as f:
                             await f.write(await res.read())
                             return True
         except:
@@ -179,6 +177,56 @@ class Download():
     def create_file(self, filename, text):
         if not os.path.exists(self._path):
             os.makedirs(self._path)
-        filepath = f'{self._path}/{name_filter_pattern.sub("",filename.split("?")[0].split("/")[-1])}'
+        filepath = f'{self._path}/{self.name_filter_pattern.sub("",filename.split("?")[0].split("/")[-1])}'
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(text)
+
+    @classmethod
+    def replace_m3u8(self, path):
+        with open(path, encoding="utf-8", mode="r+") as f:
+            m3u8_file = f.read()
+            key_res = self.key_pattern.search(m3u8_file)
+            if key_res:
+                key_name = key_res.group()
+                m3u8_file = m3u8_file.replace(
+                    key_name, self.name_filter_pattern.sub("", self.file_suffix.sub(".ts", key_name.split("?")[0].split("/")[-1])))
+            ts_list = self.ts_pattern.findall(m3u8_file)
+            for ts_link in ts_list:
+                m3u8_file = m3u8_file.replace(
+                    ts_link, self.name_filter_pattern.sub("", ts_link.split("?")[0].split("/")[-1]))
+            f.truncate(0)
+            f.seek(0)
+            f.write(m3u8_file)
+
+
+class NunuyyDownload(Download):
+
+    ts_pattern = re.compile(r"https://puui.qpic.cn.*")
+
+    async def down_file(self, name, url):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
+                    if res.status == 200:
+                        if self.ts_pattern.match(name):
+                            async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("/")[-2])}.ts', mode="wb") as f:
+                                await f.write(await res.read())
+                                return True
+                        async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("/")[-1])}', mode="wb") as f:
+                            await f.write(await res.read())
+                            return True
+        except:
+            logging.error(traceback.format_exc())
+            return False
+
+    @classmethod
+    def replace_m3u8(self, path):
+        with open(path, encoding="utf-8", mode="r+") as f:
+            m3u8_file = f.read()
+            ts_list = self.ts_pattern.findall(m3u8_file)
+            for ts_link in ts_list:
+                m3u8_file = m3u8_file.replace(
+                    ts_link, self.name_filter_pattern.sub("", ts_link.split("/")[-2])) + ".ts"
+            f.truncate(0)
+            f.seek(0)
+            f.write(m3u8_file)
