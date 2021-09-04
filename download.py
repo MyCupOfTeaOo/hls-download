@@ -143,24 +143,24 @@ class Download():
                 self.write_log()
 
     async def uid_process(self):
-        if len(self._wait_down_uid) < 1:
-            return
-        uid = self._wait_down_uid.pop(0)
-        self._downloading_uid.append(uid)
-        url = urljoin(self._root_url, uid)
-        logging.debug(f'开始下载 {url}')
-        result = await self.down_file(uid, url)
-        if result:
-            self._consecutive_error_count = 0
-            self._downloading_uid.remove(uid)
-            logging.debug(f'{uid} 下载成功')
-        else:
-            logging.error(f'{uid} 下载失败')
-            self._error_count += 1
-            self._consecutive_error_count += 1
-            self._wait_down_uid.append(uid)
-            self._downloading_uid.remove(uid)
-        await self.uid_process()
+        while True:
+            if len(self._wait_down_uid) < 1:
+                return
+            uid = self._wait_down_uid.pop(0)
+            self._downloading_uid.append(uid)
+            url = urljoin(self._root_url, uid)
+            logging.debug(f'开始下载 {url}')
+            result = await self.down_file(uid, url)
+            if result:
+                self._consecutive_error_count = 0
+                self._downloading_uid.remove(uid)
+                logging.debug(f'{uid} 下载成功')
+            else:
+                logging.error(f'{uid} 下载失败')
+                self._error_count += 1
+                self._consecutive_error_count += 1
+                self._wait_down_uid.append(uid)
+                self._downloading_uid.remove(uid)
 
     async def down_file(self, name, url):
         try:
