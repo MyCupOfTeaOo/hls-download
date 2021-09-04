@@ -91,12 +91,12 @@ class Download():
                 with open(f'{self._path}/{log.get("last_m3u8")}', encoding="utf-8", mode="r") as f:
                     last_m3u8 = f.read()
                 last_list_uid = self.ts_pattern.findall(last_m3u8)
-                list_url = self.ts_pattern.findall(list_text)
-                if last_list_uid[0] != list_url[0]:
+                self._list_uid = self.ts_pattern.findall(list_text)
+                if last_list_uid[0] != self._list_uid[0]:
                     logging.warning("检测到uid变动,重构uid")
                     old_list_uid = log["wait_urls"]
                     new_list_uid = list(
-                        map(lambda old_uid: list_url[last_list_uid.index(old_uid)], old_list_uid))
+                        map(lambda old_uid: self._list_uid[last_list_uid.index(old_uid)], old_list_uid))
                     # key
                     key_res = self.key_pattern.search(list_text)
                     key = None
@@ -109,11 +109,10 @@ class Download():
                             raise RuntimeError("下载key文件失败")
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
 
-                    self._list_uid = new_list_uid
-                    self._wait_down_uid = self._list_uid.copy()
+                    self._wait_down_uid = new_list_uid.copy()
                 else:
-                    self._list_uid = log["wait_urls"]
-                    self._wait_down_uid = self._list_uid.copy()
+
+                    self._wait_down_uid = log["wait_urls"].copy()
                 await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
                 # 回写日志,防止重下载
                 self.write_log()
