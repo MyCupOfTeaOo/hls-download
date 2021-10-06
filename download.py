@@ -81,7 +81,7 @@ class Download():
     async def refactor_list(self):
         headers = {'user-agent': get_user_agent()}
         async with aiohttp.ClientSession() as session:
-            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy) as res:
+            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
                 list_text = await res.text()
                 if (res.status > 300):
                     logging.error(list_text)
@@ -120,7 +120,7 @@ class Download():
     async def parse_list(self):
         headers = {'user-agent': get_user_agent()}
         async with aiohttp.ClientSession() as session:
-            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy) as res:
+            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
                 list_text = await res.text()
                 if (res.status > 300):
                     logging.error(list_text)
@@ -164,7 +164,7 @@ class Download():
     async def down_file(self, name, url):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
+                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
                     if res.status == 200:
                         async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("?")[0].split("/")[-1])}', mode="wb") as f:
                             await f.write(await res.read())
@@ -205,7 +205,7 @@ class NunuyyDownload(Download):
     async def down_file(self, name, url):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy) as res:
+                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
                     if res.status == 200:
                         if self.ts_pattern.match(name):
                             async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("/")[-2])}.ts', mode="wb") as f:
