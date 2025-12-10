@@ -1,27 +1,73 @@
+import multiprocessing
+
 import aiohttp
 import asyncio
+
 # from fake_useragent import UserAgent
 import os
 import re
 import logging
 import aiofiles
 import signal
-import sys
 import json
-import glob
 import traceback
 from urllib.parse import urljoin
+from pydantic import BaseModel
 
 TIMEOUT = 20
+
+
+class ResolveResult(BaseModel):
+    url: str
+    name: str
 
 
 def get_user_agent():
     # ua = UserAgent()
     # return ua.random
-    return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
+    return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
 
 
-class Download():
+# playwright 与 event loop 冲突,使用多进程解决
+def worker(url: str, name: str, q: multiprocessing.Queue):
+
+    from playwright.sync_api import sync_playwright
+
+    content = ""
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                ],
+            )
+            page = browser.new_page(user_agent=get_user_agent())
+            page.goto(url)
+            content = page.content()
+            m3u8_url = re.search(r"https?://[^\s'\"<>]+?\.m3u8", content).group()
+            name = (
+                re.search(r"[a-zA-Z]+-[0-9]+", page.title()).group()
+                if name is None
+                else name
+            )
+            browser.close()
+            logging.info(f"m3u8_url={m3u8_url}, name={name}")
+            q.put(
+                ResolveResult(
+                    url=m3u8_url,
+                    name=name,
+                )
+            )
+        except Exception as e:
+            logging.error(content)
+            logging.error("worker error", exc_info=e)
+            q.put(None)
+
+
+class Download:
     _m3u8_url = ""
     _list_uid = []
     _downloading_uid = []
@@ -38,57 +84,88 @@ class Download():
         self._proxy = proxy
         self.process_num = process_num
         self._name = name
-        self._root_url = "/".join(list_url.split("?")[0].split('/')[:-1]) + "/"
-        self._path = f'video/{name}'
+        self._root_url = "/".join(list_url.split("?")[0].split("/")[:-1]) + "/"
+        self._path = f"video/{name}"
+
+    @classmethod
+    def resolve(cls, url: str, name: str = None, proxy=None) -> ResolveResult:
+        if url.endswith("m3u8"):
+            if not name:
+                raise ValueError("video name not found")
+            return ResolveResult(
+                url=url,
+                name=name,
+            )
+
+        q = multiprocessing.Queue()
+        p = multiprocessing.Process(target=worker, args=(url, name, q))
+        p.start()
+        p.join()
+        return q.get()
 
     async def go(self):
         signal.signal(signal.SIGTERM, self.registry_exit_callback)
         signal.signal(signal.SIGINT, self.registry_exit_callback)
         asyncio.ensure_future(self.monitor())
-        if os.path.exists(f'{self._path}/log.json'):
-            logging.debug(f'检测到历史下载记录,重新构建队列')
+        if os.path.exists(f"{self._path}/log.json"):
+            logging.debug(f"检测到历史下载记录,重新构建队列")
             await self.refactor_list()
         else:
             await self.parse_list()
 
     async def monitor(self):
-        logging.info(f'总共:\t {len(self._list_uid)}')
-        logging.info(
-            f'已下载:\t {len(self._list_uid) - len(self._wait_down_uid)}')
-        logging.info(f'待下载:\t {len(self._wait_down_uid)}')
-        logging.info(f'正在下载:\t {len(self._downloading_uid)}')
-        logging.info(f'失败次数:\t {self._error_count}')
-        if (self._consecutive_error_count > 20):
+        logging.info(f"总共:\t {len(self._list_uid)}")
+        logging.info(f"已下载:\t {len(self._list_uid) - len(self._wait_down_uid)}")
+        logging.info(f"待下载:\t {len(self._wait_down_uid)}")
+        logging.info(f"正在下载:\t {len(self._downloading_uid)}")
+        logging.info(f"失败次数:\t {self._error_count}")
+        if self._consecutive_error_count > 20:
             logging.error("连续下载失败过多,退出程序")
             self.registry_exit_callback(1, 1)
         await asyncio.sleep(5)
         asyncio.ensure_future(self.monitor())
 
     def registry_exit_callback(self, signum, frame):
-        logging.debug('检测到退出信号,准备写日志')
+        logging.debug("检测到退出信号,准备写日志")
         self.write_log()
         os._exit(0)
 
     def write_log(self):
-        with open(f'{self._path}/log.json', "w", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "wait_urls": self._wait_down_uid + self._downloading_uid,
-                "_error_count": self._error_count,
-                "last_m3u8": self.name_filter_pattern.sub("", self._m3u8_url.split("?")[0].split('/')[-1])
-            }, ensure_ascii=False,
-                indent=2, separators=(',', ':')))
+        with open(f"{self._path}/log.json", "w", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "wait_urls": self._wait_down_uid + self._downloading_uid,
+                        "_error_count": self._error_count,
+                        "last_m3u8": self.name_filter_pattern.sub(
+                            "", self._m3u8_url.split("?")[0].split("/")[-1]
+                        ),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    separators=(",", ":"),
+                )
+            )
 
     async def refactor_list(self):
-        headers = {'user-agent': get_user_agent()}
+        headers = {"user-agent": get_user_agent()}
         async with aiohttp.ClientSession() as session:
-            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
+            async with session.get(
+                self._m3u8_url,
+                headers=headers,
+                timeout=TIMEOUT,
+                proxy=self._proxy,
+                verify_ssl=False,
+            ) as res:
                 list_text = await res.text()
-                if (res.status > 300):
+                if res.status > 300:
                     logging.error(list_text)
                     os._exit(0)
-                with open(f'{self._path}/log.json', encoding="utf-8", mode="r") as f:
+                with open(f"{self._path}/log.json", encoding="utf-8", mode="r") as f:
                     log = json.loads(f.read())
-                with open(f'{self._path}/{log.get("last_m3u8")}', encoding="utf-8", mode="r") as f:
+                with open(
+                    f'{self._path}/{log.get("last_m3u8")}', encoding="utf-8", mode="r"
+                ) as f:
                     last_m3u8 = f.read()
                 last_list_uid = self.ts_pattern.findall(last_m3u8)
                 self._list_uid = self.ts_pattern.findall(list_text)
@@ -96,16 +173,24 @@ class Download():
                     logging.warning("检测到uid变动,重构uid")
                     old_list_uid = log["wait_urls"]
                     new_list_uid = list(
-                        map(lambda old_uid: self._list_uid[last_list_uid.index(old_uid)], old_list_uid))
+                        map(
+                            lambda old_uid: self._list_uid[
+                                last_list_uid.index(old_uid)
+                            ],
+                            old_list_uid,
+                        )
+                    )
                     # key
                     key_res = self.key_pattern.search(list_text)
                     key = None
                     if key_res:
                         key = key_res.group()
-                    self.create_file(
-                        self._m3u8_url, list_text + '\n#EXT-X-ENDLIST')
+                    self.create_file(self._m3u8_url, list_text + "\n#EXT-X-ENDLIST")
                     if key:
-                        if not await self.down_file(self.file_suffix.sub(".ts", key), urljoin(self._root_url, key)):
+                        if not await self.down_file(
+                            self.file_suffix.sub(".ts", key),
+                            urljoin(self._root_url, key),
+                        ):
                             raise RuntimeError("下载key文件失败")
                     os.remove(f'{self._path}/{log.get("last_m3u8")}')
 
@@ -113,16 +198,24 @@ class Download():
                 else:
 
                     self._wait_down_uid = log["wait_urls"].copy()
-                await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
+                await asyncio.gather(
+                    *[self.uid_process() for i in range(self.process_num)]
+                )
                 # 回写日志,防止重下载
                 self.write_log()
 
     async def parse_list(self):
-        headers = {'user-agent': get_user_agent()}
+        headers = {"user-agent": get_user_agent()}
         async with aiohttp.ClientSession() as session:
-            async with session.get(self._m3u8_url, headers=headers, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
+            async with session.get(
+                self._m3u8_url,
+                headers=headers,
+                timeout=TIMEOUT,
+                proxy=self._proxy,
+                verify_ssl=False,
+            ) as res:
                 list_text = await res.text()
-                if (res.status > 300):
+                if res.status > 300:
                     logging.error(list_text)
                     os._exit(0)
                 # key
@@ -130,14 +223,15 @@ class Download():
                 key = None
                 if key_res:
                     key = key_res.group()
-                self.create_file(self._m3u8_url, list_text +
-                                 '\n#EXT-X-ENDLIST')
+                self.create_file(self._m3u8_url, list_text + "\n#EXT-X-ENDLIST")
                 if key:
                     if not await self.down_file(key, urljoin(self._root_url, key)):
                         raise RuntimeError("下载key文件失败")
                 self._list_uid = self.ts_pattern.findall(list_text)
                 self._wait_down_uid = self._list_uid.copy()
-                await asyncio.gather(*[self.uid_process() for i in range(self.process_num)])
+                await asyncio.gather(
+                    *[self.uid_process() for i in range(self.process_num)]
+                )
                 # 回写日志,防止重下载
                 self.write_log()
 
@@ -148,14 +242,14 @@ class Download():
             uid = self._wait_down_uid.pop(0)
             self._downloading_uid.append(uid)
             url = urljoin(self._root_url, uid)
-            logging.debug(f'开始下载 {url}')
+            logging.debug(f"开始下载 {url}")
             result = await self.down_file(uid, url)
             if result:
                 self._consecutive_error_count = 0
                 self._downloading_uid.remove(uid)
-                logging.debug(f'{uid} 下载成功')
+                logging.debug(f"{uid} 下载成功")
             else:
-                logging.error(f'{uid} 下载失败')
+                logging.error(f"{uid} 下载失败")
                 self._error_count += 1
                 self._consecutive_error_count += 1
                 self._wait_down_uid.append(uid)
@@ -164,9 +258,14 @@ class Download():
     async def down_file(self, name, url):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
+                async with session.get(
+                    url, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False
+                ) as res:
                     if res.status == 200:
-                        async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("?")[0].split("/")[-1])}', mode="wb") as f:
+                        async with aiofiles.open(
+                            f'{self._path}/{self.name_filter_pattern.sub("",name.split("?")[0].split("/")[-1])}',
+                            mode="wb",
+                        ) as f:
                             await f.write(await res.read())
                             return True
         except:
@@ -188,11 +287,22 @@ class Download():
             if key_res:
                 key_name = key_res.group()
                 m3u8_file = m3u8_file.replace(
-                    key_name, self.name_filter_pattern.sub("", self.file_suffix.sub(".ts", key_name.split("?")[0].split("/")[-1])))
+                    key_name,
+                    self.name_filter_pattern.sub(
+                        "",
+                        self.file_suffix.sub(
+                            ".ts", key_name.split("?")[0].split("/")[-1]
+                        ),
+                    ),
+                )
             ts_list = self.ts_pattern.findall(m3u8_file)
             for ts_link in ts_list:
                 m3u8_file = m3u8_file.replace(
-                    ts_link, self.name_filter_pattern.sub("", ts_link.split("?")[0].split("/")[-1]))
+                    ts_link,
+                    self.name_filter_pattern.sub(
+                        "", ts_link.split("?")[0].split("/")[-1]
+                    ),
+                )
             f.truncate(0)
             f.seek(0)
             f.write(m3u8_file)
@@ -205,13 +315,21 @@ class NunuyyDownload(Download):
     async def down_file(self, name, url):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False) as res:
+                async with session.get(
+                    url, timeout=TIMEOUT, proxy=self._proxy, verify_ssl=False
+                ) as res:
                     if res.status == 200:
                         if self.ts_pattern.match(name):
-                            async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("/")[-2])}.ts', mode="wb") as f:
+                            async with aiofiles.open(
+                                f'{self._path}/{self.name_filter_pattern.sub("",name.split("/")[-2])}.ts',
+                                mode="wb",
+                            ) as f:
                                 await f.write(await res.read())
                                 return True
-                        async with aiofiles.open(f'{self._path}/{self.name_filter_pattern.sub("",name.split("/")[-1])}', mode="wb") as f:
+                        async with aiofiles.open(
+                            f'{self._path}/{self.name_filter_pattern.sub("",name.split("/")[-1])}',
+                            mode="wb",
+                        ) as f:
                             await f.write(await res.read())
                             return True
         except:
@@ -224,8 +342,13 @@ class NunuyyDownload(Download):
             m3u8_file = f.read()
             ts_list = self.ts_pattern.findall(m3u8_file)
             for ts_link in ts_list:
-                m3u8_file = m3u8_file.replace(
-                    ts_link, self.name_filter_pattern.sub("", ts_link.split("/")[-2])) + ".ts"
+                m3u8_file = (
+                    m3u8_file.replace(
+                        ts_link,
+                        self.name_filter_pattern.sub("", ts_link.split("/")[-2]),
+                    )
+                    + ".ts"
+                )
             f.truncate(0)
             f.seek(0)
             f.write(m3u8_file)
